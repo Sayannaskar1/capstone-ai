@@ -1,0 +1,14 @@
+# ── Original dependencies ──────────────────────────────────────────────────────
+streamlit
+langgraph
+langchain-community
+langchain-core
+pymupdf
+
+# ── RAG dependencies ───────────────────────────────────────────────────────────
+sentence-transformers>=2.7.0
+faiss-cpu>=1.8.0
+numpy>=1.24.0
+
+# ── PDF report export ──────────────────────────────────────────────────────────
+reportlab>=4.1.0
