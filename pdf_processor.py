@@ -1,55 +1,79 @@
+"""
+pdf_processor.py
+Optimised PDF extraction — opens the document ONCE per call.
+"""
+
 import fitz  # PyMuPDF
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any
+
+
+# ── Primary (optimised) API ────────────────────────────────────────────────────
+
+def extract_all(pdf_bytes: bytes) -> Dict[str, Any]:
+    """
+    Open the PDF exactly once and return:
+        full_text   – concatenated text of all pages
+        pages       – list of (page_number [1-based], page_text) tuples
+        page_count  – total number of pages
+        word_count  – approximate word count of the full text
+    """
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    pages: List[Tuple[int, str]] = []
+    full_text_parts: List[str] = []
+
+    for i, page in enumerate(doc, start=1):
+        text = page.get_text()
+        pages.append((i, text))
+        full_text_parts.append(text)
+
+    full_text = "\n".join(full_text_parts)
+    return {
+        "full_text":  full_text,
+        "pages":      pages,
+        "page_count": len(pages),
+        "word_count": len(full_text.split()),
+    }
+
+
+# ── Backward-compat wrappers (used by old code / tests) ───────────────────────
 
 def extract_text_from_pdf(pdf_bytes: bytes) -> str:
-    """Extracts raw text from a PDF file."""
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    text = ""
-    for page in doc:
-        text += page.get_text()
-    return text
+    """Return the full concatenated text of a PDF. Calls extract_all internally."""
+    return extract_all(pdf_bytes)["full_text"]
 
 
-# --- NEW CODE START ---
 def extract_pages(pdf_bytes: bytes) -> List[Tuple[int, str]]:
-    """
-    Extract text from each page individually.
-
-    Returns:
-        List of (page_number, page_text) tuples. Page numbers are 1-based.
-    """
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    pages = []
-    for i, page in enumerate(doc, start=1):
-        pages.append((i, page.get_text()))
-    return pages
-# --- NEW CODE END ---
+    """Return per-page (page_number, text) tuples. Calls extract_all internally."""
+    return extract_all(pdf_bytes)["pages"]
 
 
-# --- NEW CODE START ---
+# ── Text chunking for RAG ──────────────────────────────────────────────────────
+
 def chunk_text(text: str, chunk_size: int = 700, overlap: int = 100) -> List[str]:
     """
     Splits extracted text into overlapping word-based chunks for RAG.
 
     Args:
-        text: Full document text.
+        text:       Full document text.
         chunk_size: Approximate number of words per chunk.
-        overlap: Number of words to overlap between consecutive chunks.
+        overlap:    Number of words to overlap between consecutive chunks.
 
     Returns:
         List of text chunks.
     """
     words = text.split()
-    chunks = []
+    if not words:
+        return []
+
+    chunks: List[str] = []
     start = 0
+    step = max(1, chunk_size - overlap)
 
     while start < len(words):
         end = min(start + chunk_size, len(words))
-        chunk = " ".join(words[start:end])
-        chunks.append(chunk)
+        chunks.append(" ".join(words[start:end]))
         if end == len(words):
             break
-        start += chunk_size - overlap  # slide forward with overlap
+        start += step
 
     return chunks
-# --- NEW CODE END ---
