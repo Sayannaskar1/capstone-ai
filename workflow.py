@@ -251,8 +251,18 @@ def check_compliance(state: PipelineState) -> dict:
     # truncate the document to the first ~15,000 characters (approx 4,000 tokens).
     # This ensures the LLM reads the first 4-5 pages perfectly in order, without 
     # crashing the Groq API.
-    # Use up to 20,000 chars (~5,000 tokens) — covers most legal/SLA docs fully
-    context = full_text[:20000]
+    # ── Smart context sampling: head + tail covers most legal/SLA docs ───────
+    # Legal and SLA documents often have key clauses at the END (termination,
+    # penalties, jurisdiction). Taking only the first N chars misses these.
+    # We sample the beginning (overview/definitions) + end (specific clauses).
+    MAX_HEAD = 12000   # ~3,000 tokens — covers intro, scope, key definitions
+    MAX_TAIL = 4000    # ~1,000 tokens — covers final clauses, SLA tables, penalties
+    if len(full_text) <= MAX_HEAD + MAX_TAIL:
+        context = full_text
+    else:
+        head = full_text[:MAX_HEAD]
+        tail = full_text[-MAX_TAIL:]
+        context = head + "\n\n[... middle section omitted for brevity ...]\n\n" + tail
 
     # ── Single batched LLM call for ALL rules ────────────────────────────────
     raw_results = _call_llm_batch(rules, context)

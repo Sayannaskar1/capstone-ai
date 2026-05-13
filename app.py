@@ -40,7 +40,6 @@ for key, default in [
     ("show_rule_editor", False),
     ("show_history", False),
     ("history_view_id", None),
-    ("preset_counter", 0),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -52,6 +51,40 @@ if "rules" not in st.session_state:
         "Encoding consistency UTF-8 across text (only language to be supported : EN)",
         "No Abusive languages in PDF or any unlawful content",
     ]
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# PRESETS — defined at module level so they're always accessible
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PRESETS = {
+    "🔒 Privacy & Security": [
+        "If text content contains PII/personal information (email, phone etc..)",
+        "If text contains confidential information (sensitive company details or IP)",
+        "Encoding consistency UTF-8 across text (only EN supported)",
+        "No Abusive languages in PDF or any unlawful content",
+    ],
+    "⚖️ Legal Contracts": [
+        "Document must contain a clearly defined Confidentiality or Non-Disclosure clause",
+        "The term Indemnity or Indemnification must be clearly defined with scope and limits",
+        "Applicable governing law and jurisdiction must be explicitly stated",
+        "Termination conditions and notice period must be specified",
+        "Dispute resolution mechanism (arbitration or litigation) must be stated",
+    ],
+    "📊 SLA Compliance": [
+        "Uptime or availability SLA percentage (e.g. 99.9%) must be explicitly defined",
+        "Incident response and resolution time targets must be specified",
+        "Penalty or credit clauses for SLA breach must be present",
+        "Measurement methodology and reporting frequency must be stated",
+    ],
+}
+PRESET_OPTIONS = ["— Select a preset —"] + list(PRESETS.keys())
+
+
+def _on_preset_change():
+    """on_change callback: fires BEFORE the rerender, so no st.rerun() needed."""
+    selected = st.session_state.get("preset_selector")
+    if selected and selected != "— Select a preset —" and selected in PRESETS:
+        st.session_state.rules = PRESETS[selected]
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -92,42 +125,18 @@ with st.sidebar:
         st.session_state.show_rule_editor = not st.session_state.show_rule_editor
         st.rerun()
 
-    # Preset loader — use counter-keyed selectbox to reset after selection
-    PRESETS = {
-        "🔒 Privacy & Security": [
-            "If text content contains PII/personal information (email, phone etc..)",
-            "If text contains confidential information (sensitive company details or IP)",
-            "Encoding consistency UTF-8 across text (only EN supported)",
-            "No Abusive languages in PDF or any unlawful content",
-        ],
-        "⚖️ Legal Contracts": [
-            "Document must contain a clearly defined Confidentiality or Non-Disclosure clause",
-            "The term Indemnity or Indemnification must be clearly defined with scope and limits",
-            "Applicable governing law and jurisdiction must be explicitly stated",
-            "Termination conditions and notice period must be specified",
-            "Dispute resolution mechanism (arbitration or litigation) must be stated",
-        ],
-        "📊 SLA Compliance": [
-            "Uptime or availability SLA percentage (e.g. 99.9%) must be explicitly defined",
-            "Incident response and resolution time targets must be specified",
-            "Penalty or credit clauses for SLA breach must be present",
-            "Measurement methodology and reporting frequency must be stated",
-        ],
-    }
-    preset = st.selectbox(
+    # Preset loader — on_change fires atomically, no st.rerun() needed
+    st.selectbox(
         "Load Preset",
-        ["—", "🔒 Privacy & Security", "⚖️ Legal Contracts", "📊 SLA Compliance"],
-        key=f"preset_select_{st.session_state.preset_counter}",
+        PRESET_OPTIONS,
+        key="preset_selector",
+        on_change=_on_preset_change,
         label_visibility="collapsed",
     )
-    if preset != "—" and preset in PRESETS:
-        st.session_state.rules = PRESETS[preset]
-        st.session_state.preset_counter += 1   # forces selectbox to reset to "—"
-        st.rerun()
 
     # Run & History
     st.markdown("<br>", unsafe_allow_html=True)
-    
+
     col_run, col_hist = st.columns([3, 1])
     with col_run:
         run_scan = st.button("🚀 Run Scan", type="primary", width="stretch")
@@ -144,7 +153,7 @@ with st.sidebar:
         '  <div class="sb-info-row"><span class="sb-info-key"><span class="sb-dot sb-dot-green"></span>Status</span><span class="sb-info-val">Online</span></div>'
         '  <div class="sb-info-row"><span class="sb-info-key">Model</span><span class="sb-info-val">llama3 · 8B</span></div>'
         '  <div class="sb-info-row"><span class="sb-info-key">Pipeline</span><span class="sb-info-val">LangGraph</span></div>'
-        '  <div class="sb-info-row"><span class="sb-info-key">RAG</span><span class="sb-info-val">FAISS + MiniLM</span></div>'
+        '  <div class="sb-info-row"><span class="sb-info-key">Context</span><span class="sb-info-val">Full-Doc Injection</span></div>'
         '</div>',
         unsafe_allow_html=True,
     )
