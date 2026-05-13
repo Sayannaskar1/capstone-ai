@@ -7,11 +7,8 @@ langchain-groq
 python-dotenv
 pymupdf
 
-# ── RAG ────────────────────────────────────────────────────────────────────────
-sentence-transformers>=2.7.0
-faiss-cpu>=1.8.0
-numpy>=1.24.0
-torchvision
+# ── Dependencies removed to prevent Streamlit Cloud 1GB memory crashes ───────
+# (RAG is completely bypassed, so these heavy ML libraries are no longer needed)
 
 # ── PDF report export ──────────────────────────────────────────────────────────
 reportlab>=4.1.0
