@@ -6,8 +6,13 @@ langchain-groq
 python-dotenv
 pymupdf
 
-# ── Dependencies removed to prevent Streamlit Cloud 1GB memory crashes ───────
-# (RAG is completely bypassed, so these heavy ML libraries are no longer needed)
+# ── Lightweight RAG (FAISS + TF-IDF, zero PyTorch) ────────────────────────────
+# faiss-cpu:    ~10 MB  — vector similarity index
+# scikit-learn: ~30 MB  — TF-IDF vectorizer for embeddings
+# scipy:        ~20 MB  — required by scikit-learn
+# Total RAG stack: ~60 MB (vs ~1 GB for sentence-transformers + torch)
+faiss-cpu
+scikit-learn
 
 # ── PDF report export ──────────────────────────────────────────────────────────
 reportlab>=4.1.0

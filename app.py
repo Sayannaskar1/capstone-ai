@@ -80,12 +80,6 @@ PRESETS = {
 PRESET_OPTIONS = ["— Select a preset —"] + list(PRESETS.keys())
 
 
-def _on_preset_change():
-    """on_change callback: fires BEFORE the rerender, so no st.rerun() needed."""
-    selected = st.session_state.get("preset_selector")
-    if selected and selected != "— Select a preset —" and selected in PRESETS:
-        st.session_state.rules = PRESETS[selected]
-
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # SIDEBAR
@@ -125,14 +119,18 @@ with st.sidebar:
         st.session_state.show_rule_editor = not st.session_state.show_rule_editor
         st.rerun()
 
-    # Preset loader — on_change fires atomically, no st.rerun() needed
-    st.selectbox(
-        "Load Preset",
-        PRESET_OPTIONS,
-        key="preset_selector",
-        on_change=_on_preset_change,
-        label_visibility="collapsed",
-    )
+    # Preset loader — buttons are the most reliable widget for state updates in Streamlit
+    st.markdown('<div style="font-size:0.75rem;color:#64748b;margin-bottom:4px;">LOAD PRESET</div>', unsafe_allow_html=True)
+    p1, p2, p3 = st.columns(3)
+    with p1:
+        if st.button("🔒", help="Privacy & Security", key="preset_btn_privacy", width="stretch"):
+            st.session_state.rules = PRESETS["🔒 Privacy & Security"]
+    with p2:
+        if st.button("⚖️", help="Legal Contracts", key="preset_btn_legal", width="stretch"):
+            st.session_state.rules = PRESETS["⚖️ Legal Contracts"]
+    with p3:
+        if st.button("📊", help="SLA Compliance", key="preset_btn_sla", width="stretch"):
+            st.session_state.rules = PRESETS["📊 SLA Compliance"]
 
     # Run & History
     st.markdown("<br>", unsafe_allow_html=True)

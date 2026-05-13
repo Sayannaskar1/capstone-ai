@@ -1,71 +1,75 @@
 """
 rag_utils.py
-Embedding model is loaded once at the process level and exposed via a helper
-that is compatible with Streamlit's @st.cache_resource pattern.
+Lightweight FAISS-based RAG using TF-IDF embeddings (scikit-learn).
+
+WHY TF-IDF instead of sentence_transformers:
+  - sentence_transformers pulls in PyTorch (~800MB) which crashes Streamlit Cloud (1GB limit).
+  - TF-IDF + faiss-cpu is ~70MB total and zero PyTorch dependency.
+  - For compliance rules (SLA, uptime, penalty, governing law), TF-IDF keyword
+    matching is highly effective because compliance language is domain-specific
+    and keyword-rich.
 """
 
 from typing import List
 import numpy as np
-from sentence_transformers import SentenceTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer
 import faiss
 
-# ── Module-level singleton (safe for multi-thread, single-process Streamlit) ──
-_embedding_model: SentenceTransformer | None = None
 
-
-def get_embedding_model() -> SentenceTransformer:
+class FAISSRetriever:
     """
-    Lazy-load the SentenceTransformer model exactly once per process.
-    Call this from a @st.cache_resource wrapper in app.py for the cleanest
-    Streamlit integration, or use it directly — both work.
-    """
-    global _embedding_model
-    if _embedding_model is None:
-        _embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
-    return _embedding_model
+    Stores document chunks in a FAISS inner-product index using TF-IDF vectors.
 
-
-class RAGRetriever:
-    """
-    Builds a FAISS cosine-similarity index from document chunks and retrieves
-    the top-k most relevant chunks for a given query.
+    Usage:
+        retriever = FAISSRetriever(chunks)
+        relevant = retriever.query("uptime SLA percentage", top_k=3)
     """
 
-    def __init__(self, chunks: List[str], model: SentenceTransformer | None = None):
-        """
-        Args:
-            chunks: List of text chunks from the document.
-            model:  Optional pre-loaded SentenceTransformer (avoids reloading).
-        """
+    def __init__(self, chunks: List[str]):
         self.chunks = chunks
-        self.model = model if model is not None else get_embedding_model()
-        self._build_index()
+        self._empty = len(chunks) == 0
 
-    def _build_index(self) -> None:
-        """Encode all chunks and build the FAISS inner-product (cosine) index."""
-        embeddings: np.ndarray = self.model.encode(
-            self.chunks, convert_to_numpy=True, show_progress_bar=False
+        if self._empty:
+            return
+
+        # TF-IDF vectorizer: bigrams help match multi-word compliance terms
+        # (e.g. "governing law", "termination clause", "incident response")
+        self.vectorizer = TfidfVectorizer(
+            max_features=3000,
+            ngram_range=(1, 2),   # unigrams + bigrams
+            stop_words="english",
+            sublinear_tf=True,    # log(1+tf) dampens very frequent terms
         )
-        faiss.normalize_L2(embeddings)
-        dim = embeddings.shape[1]
-        self.index = faiss.IndexFlatIP(dim)
-        self.index.add(embeddings)
+        tfidf_matrix = self.vectorizer.fit_transform(chunks)  # sparse
 
-    def get_relevant_chunks(self, query: str, top_k: int = 5) -> List[str]:
+        # Convert sparse → dense float32 for FAISS
+        dense = tfidf_matrix.toarray().astype(np.float32)
+
+        # L2-normalize so inner-product == cosine similarity
+        norms = np.linalg.norm(dense, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        dense = dense / norms
+
+        dim = dense.shape[1]
+        self.index = faiss.IndexFlatIP(dim)   # inner-product index
+        self.index.add(dense)
+
+    def query(self, query_text: str, top_k: int = 3) -> List[str]:
         """
-        Retrieve the top-k chunks most semantically relevant to query.
-
-        Args:
-            query: The compliance rule or question to search for.
-            top_k: Number of chunks to return.
-
-        Returns:
-            List of relevant text chunks (ordered by relevance).
+        Return the top_k document chunks most relevant to query_text.
+        Falls back to the first top_k chunks if the index is empty.
         """
-        query_vec: np.ndarray = self.model.encode(
-            [query], convert_to_numpy=True, show_progress_bar=False
-        )
-        faiss.normalize_L2(query_vec)
+        if self._empty or not query_text.strip():
+            return self.chunks[:top_k] if self.chunks else []
+
+        q_sparse = self.vectorizer.transform([query_text])
+        q_dense = q_sparse.toarray().astype(np.float32)
+
+        # Normalize query vector
+        norm = np.linalg.norm(q_dense)
+        if norm > 0:
+            q_dense = q_dense / norm
+
         k = min(top_k, len(self.chunks))
-        distances, indices = self.index.search(query_vec, k)
-        return [self.chunks[i] for i in indices[0] if i < len(self.chunks)]
+        _, indices = self.index.search(q_dense, k)
+        return [self.chunks[i] for i in indices[0] if 0 <= i < len(self.chunks)]
