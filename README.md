@@ -72,10 +72,16 @@ In this project, the graph is simple: one node called `analyze_compliance` that 
 
 The graph has a **typed state** (`PipelineState`) — a Python dictionary that carries all data between nodes: the document text, the rules, the results, and the final score. Every node receives this state and returns updates to it.
 
-### 🔍 Full-Context Analysis
-Traditional AI architectures use RAG (chunking and searching a document) to save time, but RAG frequently fails at compliance tasks because it misses "needles in a haystack" like hidden clauses or PII.
+### 🔍 FAISS + Sentence Transformers (RAG)
+**RAG** stands for *Retrieval-Augmented Generation*. The idea is simple: instead of feeding the entire document to the LLM (which would be too slow and exceed API limits), you:
 
-Because Groq and Llama 3.1 are so incredibly fast and have a massive 128k-token context window, this project bypasses RAG entirely. It feeds the **entire PDF text directly into the LLM**, ensuring 100% accurate compliance evaluation across every single page with zero missed context.
+1. **Split** the document into small chunks (e.g., 500-word pieces)
+2. **Embed** each chunk — convert it into a list of numbers (a "vector") that captures its meaning
+3. **Index** all these vectors in a fast database (FAISS)
+4. When you have a question, **embed the question** and find the chunks with the most similar vectors
+5. Feed only those relevant chunks to the LLM
+
+> **Note on API Limits:** Groq Cloud's Free Tier enforces a strict **6,000 Tokens Per Minute (TPM)** limit. A standard 50-page PDF can easily exceed 50,000 tokens. Therefore, RAG (using FAISS) is absolutely mandatory to extract only the top ~4,000 tokens of relevant text so the app doesn't crash the API.
 
 ### 📊 Plotly
 **Plotly** is a data visualization library that creates interactive, beautiful charts — gauges, radar charts, donut charts, bar charts. All charts in the Dashboard tab are rendered using Plotly.
@@ -149,8 +155,8 @@ The compliance pipeline is a **blocking operation** — it calls an LLM and wait
 
 To solve this, `app.py` uses Python's `concurrent.futures.ThreadPoolExecutor` to run the pipeline in a separate thread. The main thread enters a polling loop, calling `progress_box.caption()` every 0.3 seconds. This Streamlit API call is what enables the Stop button to work — when you click Stop, Streamlit raises a `StopException` the next time a Streamlit API call is made.
 
-### Step 4: Full Document Context Injection (`workflow.py`)
-To ensure perfect accuracy and zero missed clauses, the system bypasses RAG and injects the full document text (up to 400,000 characters) directly into the prompt. Because Groq's Llama 3.1 has a 128k-token context window, it can read the entire PDF simultaneously.
+### Step 4: FAISS Vector Retrieval (`workflow.py` + `rag_utils.py`)
+To ensure the LLM receives the most relevant information without exceeding Groq's 6,000-token Free Tier limit, the document is split into 500-word chunks. These chunks are embedded using `sentence-transformers` and indexed in FAISS. All compliance rules are combined into a single query to retrieve the top 6 most relevant chunks (~4000 tokens).
 
 ### Step 5: Batched LLM Call (`workflow.py`)
 All compliance rules are sent to Llama 3 in a **single prompt**. This is the most important performance optimization. The prompt looks like this:
@@ -395,7 +401,7 @@ The pipeline is optimized for sub-10-second latency while maintaining full docum
 | Optimization | Description | Time Saved |
 |-------------|--------|-----------|
 | Batched LLM Call | All rules are evaluated in a single prompt rather than one-by-one | ~30s |
-| Full Document Injection | Feeds the entire PDF to the LLM instead of RAG, ensuring zero missed clauses | 100% Accuracy |
+| FAISS Inner Product | Uses `IndexFlatIP` (cosine similarity) for lightning-fast retrieval over L2 distance | ~1s |
 | Reduced `num_ctx` | Context window strictly limited to 1024 tokens to speed up inference | ~4s |
 | Reduced `num_predict` | Max generation limited to 256 tokens | ~5s |
 | Eager Model Loading | `SentenceTransformer` model is cached on `app.py` startup to prevent UI freezing | UX improvement |
