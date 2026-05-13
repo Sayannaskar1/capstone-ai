@@ -225,32 +225,19 @@ def check_compliance(state: PipelineState) -> dict:
     full_text  = state.get("document_text", "")
     pages_text = state.get("pages_text", [])
 
-    # ── Fast context sampling: beginning + middle + end (no RAG overhead) ──
-    text_len = len(full_text)
-    sample_size = 500
-    beginning = full_text[:sample_size]
-    middle = full_text[text_len // 2 : text_len // 2 + sample_size] if text_len > sample_size * 2 else ""
-    end = full_text[-sample_size:] if text_len > sample_size else ""
-    context = f"{beginning}\n...\n{middle}\n...\n{end}".strip()
+    # ── Read entire PDF and store in FAISS (RAG) ───────────────────────────
+    chunks = chunk_text(full_text, chunk_size=500, overlap=100)
+    retriever = RAGRetriever(chunks, model=get_embedding_model()) if len(chunks) > 1 else None
+
+    if retriever:
+        combined_rules_query = " ".join(rules)
+        relevant_chunks = retriever.get_relevant_chunks(combined_rules_query, top_k=6)
+        context = "\n...\n".join(relevant_chunks)
+    else:
+        context = full_text
 
     # ── Single batched LLM call for ALL rules ────────────────────────────────
     raw_results = _call_llm_batch(rules, context)
-
-    # ── Build rule_results with page citations ───────────────────────────────
-    def _find_pages_with_evidence(rule: str, status: str) -> List[int]:
-        """Quick keyword scan to find pages where relevant content lives."""
-        if not pages_text:
-            return []
-        keywords = [w.lower() for w in re.findall(r'\b\w{5,}\b', rule)
-                    if w.lower() not in {"shall", "must", "should", "document",
-                                         "contains", "contain", "following", "report",
-                                         "compliant", "present", "found"}][:6]
-        evidence_pages = []
-        for pg_num, pg_text in pages_text:
-            pg_lower = pg_text.lower()
-            if sum(1 for kw in keywords if kw in pg_lower) >= max(1, len(keywords) // 3):
-                evidence_pages.append(pg_num)
-        return evidence_pages
 
     rule_results: List[Dict[str, Any]] = []
     for i, rule in enumerate(rules):
@@ -261,16 +248,7 @@ def check_compliance(state: PipelineState) -> dict:
         exp       = r.get("explanation", "")
         is_pres   = _is_presence_rule(rule)
         rule_type = "presence" if is_pres else "detection"
-
-        # Page citation — text scan only, no LLM
-        evidence_pages = _find_pages_with_evidence(rule, status)
-
-        if status == "COMPLIANT" and evidence_pages:
-            summary = f"Satisfied (page {evidence_pages}): {exp}"
-        elif status == "NON-COMPLIANT" and evidence_pages:
-            summary = f"Violation found (page {evidence_pages}): {exp}"
-        else:
-            summary = exp
+        summary = exp
 
         rule_results.append({
             "rule":             rule,
@@ -279,7 +257,6 @@ def check_compliance(state: PipelineState) -> dict:
             "llm_confidence":   conf,
             "compliance_score": score,
             "rule_type":        rule_type,
-            "evidence_pages":   evidence_pages,
         })
 
     # ── Final score and status ───────────────────────────────────────────────

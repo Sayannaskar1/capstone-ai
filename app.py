@@ -209,9 +209,9 @@ if run_scan:
                 rule_results=result["rule_results"],
                 analysis_report=result["analysis_report"]
             )
-        except Exception:
+        except Exception as e:
             progress_box.empty()
-            status_box.warning("⛔ Scan cancelled")
+            status_box.error(f"⛔ Scan failed: {str(e)}")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -671,12 +671,8 @@ with tab_findings:
         icon = "✅" if s == "COMPLIANT" else "⚠️" if s == "PARTIAL" else "🚩"
         sc = float(r.get("compliance_score", 0))
         cf = int(r.get("llm_confidence", 0))
-        ev_pages = r.get("evidence_pages", [])
-
         with st.expander(f"{icon}  Rule {idx} — {s}", expanded=(s != "COMPLIANT")):
             meta_html = ""
-            if ev_pages:
-                meta_html += f'<span>📄 Pages: {", ".join(map(str, ev_pages))}</span>'
             meta_html += f'<span>🎯 Score: {int(sc)}/100</span>'
             meta_html += f'<span>🔒 Confidence: {cf}%</span>'
 
