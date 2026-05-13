@@ -11,7 +11,6 @@ from langchain_groq import ChatGroq
 from langchain_core.prompts import PromptTemplate
 from langgraph.graph import StateGraph, END
 
-from rag_utils import RAGRetriever, get_embedding_model
 
 
 # ── 1. State ───────────────────────────────────────────────────────────────────
