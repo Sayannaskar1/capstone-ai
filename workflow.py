@@ -25,15 +25,13 @@ class PipelineState(TypedDict):
     page_results:     List[Dict[str, Any]]    # kept for API compat, always []
 
 
-# ── 2. LLM ────────────────────────────────────────────────────────────────────
-import streamlit as st
-
-# Safely fetch API key prioritizing Streamlit secrets for cloud deployment, then local env
-try:
-    groq_api_key = st.secrets.get("GROQ_API_KEY", os.getenv("GROQ_API_KEY"))
-except FileNotFoundError:
-    groq_api_key = os.getenv("GROQ_API_KEY")
-
+# ── 2. LLM ───────────────────────────────────────────────────────────────────────────
+# NOTE: Do NOT import streamlit here — it causes a circular import crash
+# (KeyError: 'workflow') because Streamlit's module tracker can't find 'workflow'
+# in sys.modules while it is still being loaded.
+# Streamlit Cloud automatically exports Secrets as environment variables,
+# so os.getenv() works correctly in both local and cloud environments.
+groq_api_key = os.getenv("GROQ_API_KEY")
 llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.0, api_key=groq_api_key)
 
 
