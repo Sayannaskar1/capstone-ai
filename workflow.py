@@ -87,31 +87,39 @@ def _determine_overall_status(score: float, rule_results: List[Dict]) -> str:
 
 
 def _compute_score(status: str, confidence: int) -> float:
-    return round(_STATUS_WEIGHT.get(status, 0.0) * confidence, 2)
+    """Score is purely status-based: COMPLIANT=100, PARTIAL=50, NON-COMPLIANT=0.
+    Confidence is displayed separately as a reliability indicator."""
+    return round(_STATUS_WEIGHT.get(status, 0.0) * 100, 2)
 
 
 # ── BATCHED prompt: evaluate ALL rules in ONE call ─────────────────────────────
 def _build_batch_prompt() -> PromptTemplate:
     return PromptTemplate.from_template(
-        "You are a precise compliance officer. Evaluate the document text "
-        "below against ALL the given rules. Respond ONLY with a valid JSON array.\n\n"
-        "Rules to evaluate:\n{rules_text}\n\n"
-        "Document Text:\n{context}\n\n"
-        "Instructions:\n"
-        "- For EACH rule, produce one JSON object in the array.\n"
-        "- status: COMPLIANT / PARTIAL / NON-COMPLIANT\n"
-        "  * COMPLIANT = The document satisfies the rule. If the rule says 'No X' or 'Must not contain X', and X is missing, it is COMPLIANT.\n"
-        "  * PARTIAL = The document partially satisfies the rule.\n"
-        "  * NON-COMPLIANT = The document violates the rule. If the rule says 'Detect X' or 'Flag X', and you find X, it is NON-COMPLIANT.\n"
-        "- llm_confidence: 0-100\n"
-        "- Be literal. Do NOT invent violations not in the text.\n"
-        "- For encoding/UTF-8: +,-,@,digits,phone formats are valid UTF-8. "
-        "  Only flag actual garbled bytes or foreign-language paragraph scripts.\n"
-        "- For PII rules: flag only data clearly and explicitly present.\n"
-        "- explanation: one crisp sentence.\n\n"
-        "Respond with ONLY this JSON array (one object per rule, same order):\n"
-        '[{{"rule":"<rule text>","status":"<COMPLIANT|PARTIAL|NON-COMPLIANT>",'
-        '"explanation":"<one sentence>","llm_confidence":<0-100>}}]'
+        "You are a senior compliance officer performing a formal document audit. "
+        "Read the document text carefully and evaluate it against EVERY rule listed below. "
+        "Respond ONLY with a valid JSON array — no prose, no markdown.\n\n"
+        "RULES TO EVALUATE:\n{rules_text}\n\n"
+        "DOCUMENT TEXT:\n{context}\n\n"
+        "EVALUATION INSTRUCTIONS:\n"
+        "For each rule, determine the status using ONLY these three values:\n"
+        "  COMPLIANT     — The document fully satisfies this rule.\n"
+        "  PARTIAL       — The document partially satisfies this rule (some elements present, some missing).\n"
+        "  NON-COMPLIANT — The document does not satisfy this rule at all.\n\n"
+        "CRITICAL LOGIC:\n"
+        "  • 'Must contain / must define / must state / must specify' rules:\n"
+        "    → COMPLIANT if the required content is clearly present in the text.\n"
+        "    → NON-COMPLIANT if the required content is completely absent.\n"
+        "  • 'Must NOT contain / No X / Flag if X found' rules:\n"
+        "    → COMPLIANT if X is NOT present (absence = good).\n"
+        "    → NON-COMPLIANT if X IS found in the text.\n"
+        "  • For SLA / legal docs: look for explicit clauses, percentages, timeframes, and legal terms.\n"
+        "  • For PII rules: only flag data that is explicitly and clearly present.\n"
+        "  • For encoding/UTF-8: only flag garbled bytes or non-Latin scripts. Symbols like +,-,@,digits are valid UTF-8.\n"
+        "  • Do NOT invent violations. Base your judgment only on the text provided.\n"
+        "  • llm_confidence (0-100): how confident you are in your verdict.\n\n"
+        "OUTPUT FORMAT — return ONLY this JSON array, one object per rule, in the same order:\n"
+        '[{{"rule":"<exact rule text>","status":"<COMPLIANT|PARTIAL|NON-COMPLIANT>",'
+        '"explanation":"<one concise sentence citing evidence or lack thereof>","llm_confidence":<0-100>}}]'
     )
 
 
@@ -243,7 +251,8 @@ def check_compliance(state: PipelineState) -> dict:
     # truncate the document to the first ~15,000 characters (approx 4,000 tokens).
     # This ensures the LLM reads the first 4-5 pages perfectly in order, without 
     # crashing the Groq API.
-    context = full_text[:15000]
+    # Use up to 20,000 chars (~5,000 tokens) — covers most legal/SLA docs fully
+    context = full_text[:20000]
 
     # ── Single batched LLM call for ALL rules ────────────────────────────────
     raw_results = _call_llm_batch(rules, context)

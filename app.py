@@ -40,6 +40,7 @@ for key, default in [
     ("show_rule_editor", False),
     ("show_history", False),
     ("history_view_id", None),
+    ("preset_counter", 0),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -91,8 +92,7 @@ with st.sidebar:
         st.session_state.show_rule_editor = not st.session_state.show_rule_editor
         st.rerun()
 
-    # Preset loader
-    preset = st.selectbox("Load Preset", ["—", "🔒 Privacy & Security", "⚖️ Legal Contracts", "📊 SLA Compliance"], label_visibility="collapsed")
+    # Preset loader — use counter-keyed selectbox to reset after selection
     PRESETS = {
         "🔒 Privacy & Security": [
             "If text content contains PII/personal information (email, phone etc..)",
@@ -114,8 +114,15 @@ with st.sidebar:
             "Measurement methodology and reporting frequency must be stated",
         ],
     }
+    preset = st.selectbox(
+        "Load Preset",
+        ["—", "🔒 Privacy & Security", "⚖️ Legal Contracts", "📊 SLA Compliance"],
+        key=f"preset_select_{st.session_state.preset_counter}",
+        label_visibility="collapsed",
+    )
     if preset != "—" and preset in PRESETS:
         st.session_state.rules = PRESETS[preset]
+        st.session_state.preset_counter += 1   # forces selectbox to reset to "—"
         st.rerun()
 
     # Run & History
