@@ -31,6 +31,9 @@ def _load_embedding_model():
     from rag_utils import get_embedding_model
     return get_embedding_model()
 
+# Pre-load the model to prevent long background downloads on first click
+_load_embedding_model()
+
 @st.cache_data(show_spinner=False)
 def _extract_pdf(file_hash: str, pdf_bytes: bytes):
     return extract_all(pdf_bytes)
