@@ -101,9 +101,9 @@ def _build_batch_prompt() -> PromptTemplate:
         "Instructions:\n"
         "- For EACH rule, produce one JSON object in the array.\n"
         "- status: COMPLIANT / PARTIAL / NON-COMPLIANT\n"
-        "  * COMPLIANT     = rule fully satisfied anywhere in the document\n"
-        "  * PARTIAL       = rule partially addressed but incomplete\n"
-        "  * NON-COMPLIANT = rule violated or requirement absent\n"
+        "  * COMPLIANT = The document satisfies the rule. If the rule says 'No X' or 'Must not contain X', and X is missing, it is COMPLIANT.\n"
+        "  * PARTIAL = The document partially satisfies the rule.\n"
+        "  * NON-COMPLIANT = The document violates the rule. If the rule says 'Detect X' or 'Flag X', and you find X, it is NON-COMPLIANT.\n"
         "- llm_confidence: 0-100\n"
         "- Be literal. Do NOT invent violations not in the text.\n"
         "- For encoding/UTF-8: +,-,@,digits,phone formats are valid UTF-8. "
@@ -238,20 +238,13 @@ def check_compliance(state: PipelineState) -> dict:
     full_text  = state.get("document_text", "")
     pages_text = state.get("pages_text", [])
 
-    # ── Read entire PDF and store in FAISS (RAG) ───────────────────────────
-    # Since Groq's Free Tier limits us to 6,000 Tokens Per Minute, we CANNOT 
-    # pass a 100k+ token document directly. We must use FAISS to extract the 
-    # most relevant chunks to stay under the limit.
-    chunks = chunk_text(full_text, chunk_size=500, overlap=100)
-    retriever = RAGRetriever(chunks, model=get_embedding_model()) if len(chunks) > 1 else None
-
-    if retriever:
-        combined_rules_query = " ".join(rules)
-        # top_k=6 is roughly ~4000 tokens, which safely fits under Groq's 6k free limit
-        relevant_chunks = retriever.get_relevant_chunks(combined_rules_query, top_k=6)
-        context = "\n...\n".join(relevant_chunks)
-    else:
-        context = full_text[:20000] # Safe truncation for very short documents
+    # ── Text Truncation to respect Groq Free Tier (6,000 TPM) ──────────────
+    # RAG (FAISS) destroys the chronological structure of the document and causes 
+    # the LLM to hallucinate on negative compliance rules. Instead, we simply 
+    # truncate the document to the first ~15,000 characters (approx 4,000 tokens).
+    # This ensures the LLM reads the first 4-5 pages perfectly in order, without 
+    # crashing the Groq API.
+    context = full_text[:15000]
 
     # ── Single batched LLM call for ALL rules ────────────────────────────────
     raw_results = _call_llm_batch(rules, context)
