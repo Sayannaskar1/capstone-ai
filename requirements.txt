@@ -1,7 +1,6 @@
 # ── Core app ───────────────────────────────────────────────────────────────────
 streamlit
 langgraph
-langchain-community
 langchain-core
 langchain-groq
 python-dotenv
