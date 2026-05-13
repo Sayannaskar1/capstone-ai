@@ -2,7 +2,12 @@ import json
 import re
 from typing import TypedDict, List, Dict, Any, Tuple
 
-from langchain_community.chat_models import ChatOllama
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from langchain_groq import ChatGroq
 from langchain_core.prompts import PromptTemplate
 from langgraph.graph import StateGraph, END
 
@@ -21,8 +26,16 @@ class PipelineState(TypedDict):
     page_results:     List[Dict[str, Any]]    # kept for API compat, always []
 
 
-# ── 2. LLM (reduced num_predict for speed) ────────────────────────────────────
-llm = ChatOllama(model="llama3", temperature=0.0, num_predict=256, num_ctx=1024)
+# ── 2. LLM ────────────────────────────────────────────────────────────────────
+import streamlit as st
+
+# Safely fetch API key prioritizing Streamlit secrets for cloud deployment, then local env
+try:
+    groq_api_key = st.secrets.get("GROQ_API_KEY", os.getenv("GROQ_API_KEY"))
+except FileNotFoundError:
+    groq_api_key = os.getenv("GROQ_API_KEY")
+
+llm = ChatGroq(model="llama3-8b-8192", temperature=0.0, api_key=groq_api_key)
 
 
 # ── 3. Helpers ────────────────────────────────────────────────────────────────

@@ -38,7 +38,7 @@ Doing this manually is slow, expensive, and error-prone. **ComplianceAI automate
 - A downloadable professional PDF report
 - A history of all your previous scans
 
-The entire analysis is powered by a **locally running AI model** (Llama 3 via Ollama), so your documents never leave your machine.
+The entire analysis is powered by a **Cloud LLM API** (Llama 3 via Groq), making it lightning-fast and ready for cloud deployment.
 
 ---
 
@@ -52,15 +52,15 @@ The entire backend is written in Python 3.9+. Python is the dominant language fo
 ### 🌐 Streamlit
 **Streamlit** is a Python library that lets you build interactive web applications using only Python code — no HTML, JavaScript, or CSS required (though you can inject custom CSS, which this project does extensively). When you run `streamlit run app.py`, it starts a local web server and renders the UI in your browser. Every time a user clicks a button or uploads a file, the entire Python script re-runs from top to bottom, and Streamlit updates only the parts of the UI that changed.
 
-### 🦙 Ollama + Llama 3
-**Ollama** is a tool that lets you run Large Language Models (LLMs) locally on your own computer. Think of it as a local version of ChatGPT that runs entirely on your machine with no internet needed.
+### 🚀 Groq + Llama 3
+**Groq** is a cloud platform that runs Large Language Models (LLMs) on specialized hardware (LPUs) at blistering speeds.
 
-**Llama 3** is a state-of-the-art open-source LLM created by Meta. It has 8 billion parameters — meaning it was trained on 8 billion numerical "weights" that encode knowledge about language, reasoning, and the world. In this project, Llama 3 acts as the compliance officer that reads document text and decides whether each compliance rule is satisfied.
+**Llama 3** is a state-of-the-art open-source LLM created by Meta. In this project, Llama 3 acts as the compliance officer that reads document text and decides whether each compliance rule is satisfied.
 
 ### ⛓️ LangChain
 **LangChain** is a framework that makes it easier to build applications powered by LLMs. Instead of manually formatting prompts and parsing LLM responses, LangChain provides clean abstractions. In this project we use two components:
 
-- **`ChatOllama`** (from `langchain-community`): A connector that lets Python talk to Ollama as if it were a chat model.
+- **`ChatGroq`** (from `langchain-groq`): A connector that lets Python talk to the Groq Cloud API.
 - **`PromptTemplate`** (from `langchain-core`): A template system where you define a prompt with placeholders like `{rules_text}` and `{context}`, then fill them in at runtime.
 
 The key pattern used is called **LCEL (LangChain Expression Language)**, written as `prompt | llm`. This is a "pipe" operator — the output of the prompt flows into the LLM, just like a Unix pipe.
@@ -133,7 +133,7 @@ processor   py         py         generator.py
 (Extract)   (AI)       (SQLite)   (PDF export)
      │          │
      │          ▼
-     │      Ollama (Llama 3) ← runs locally on your machine
+     │      Groq Cloud API (Llama 3)
      │
      ▼
 styles.py  (all CSS/theming)
@@ -233,7 +233,7 @@ This is the brain of the entire application. Every time the browser page refresh
 This is where the actual intelligence lives. It defines:
 
 - **`PipelineState`**: A TypedDict (typed dictionary) that defines the exact structure of data flowing through the LangGraph pipeline
-- **`llm`**: The configured Ollama connection to Llama 3
+- **`llm`**: The configured ChatGroq connection to Llama 3 on the Groq Cloud
 - **`_parse_rules()`**: Parses the multi-line rules string into a clean list, stripping numbering
 - **`_is_presence_rule()`**: Uses keyword matching to classify a rule as "presence" (must have X) or "detection" (must not have X)
 - **`_build_batch_prompt()`**: Constructs the carefully engineered LangChain PromptTemplate with detailed instructions for the LLM
@@ -315,8 +315,9 @@ This installs:
 |---------|---------|
 | `streamlit` | Web UI framework |
 | `langgraph` | AI workflow graph engine |
-| `langchain-community` | Ollama LLM connector |
+| `langchain-groq` | Groq Cloud API connector |
 | `langchain-core` | Prompt templates and LCEL |
+| `python-dotenv` | Load environment variables |
 | `pymupdf` | PDF text extraction |
 | `sentence-transformers` | Text embedding model |
 | `faiss-cpu` | Vector similarity search |
@@ -324,21 +325,18 @@ This installs:
 | `reportlab` | PDF report generation |
 | `plotly` | Interactive charts |
 
-### Step 3: Install Ollama
-Ollama is the tool that runs Llama 3 locally.
+### Step 3: Configure Groq API Key
+This project uses the Groq Cloud API to run Llama 3 for extremely fast inference.
 
-1. Download from [https://ollama.com](https://ollama.com)
-2. Install and launch the Ollama application (it must remain running in the background)
-3. Pull the Llama 3 model (this downloads ~4.7 GB, one time only):
+1. Go to [console.groq.com](https://console.groq.com/) and create a free account
+2. Generate an API Key
+3. Set the API key in your environment. You can do this by creating a `.env` file in the project directory:
+
 ```bash
-ollama pull llama3
+echo "GROQ_API_KEY=your_api_key_here" > .env
 ```
-4. Verify Ollama is running:
-```bash
-ollama list
-# Should show: llama3   ...
-```
-*(Note: If you are running on a Linux server without a desktop GUI, you must start the server manually by running `ollama serve` in a separate terminal window).*
+
+*(Note: If deploying to Streamlit Community Cloud, add this key to your app's Advanced Settings > Secrets).*
 
 ---
 
@@ -420,8 +418,9 @@ The pipeline is optimized for sub-10-second latency while maintaining full docum
 ```
 streamlit          — Web app framework
 langgraph          — AI workflow graph (StateGraph)
-langchain-community — ChatOllama LLM connector
+langchain-groq     — Groq Cloud LLM connector
 langchain-core     — PromptTemplate, LCEL pipe operator
+python-dotenv      — Environment variable loading
 pymupdf            — PDF text extraction (fitz)
 sentence-transformers — Text embeddings (all-MiniLM-L6-v2)
 faiss-cpu          — Vector similarity index
@@ -433,4 +432,4 @@ sqlite3            — Built-in Python, no install needed
 
 ---
 
-*Built with ❤️ using LangGraph, Ollama, Streamlit, and Python.*
+*Built with ❤️ using LangGraph, Groq, Streamlit, and Python.*
