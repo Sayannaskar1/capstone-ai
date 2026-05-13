@@ -22,7 +22,7 @@ class PipelineState(TypedDict):
 
 
 # ── 2. LLM (reduced num_predict for speed) ────────────────────────────────────
-llm = ChatOllama(model="llama3", temperature=0.1, num_predict=256, num_ctx=1024)
+llm = ChatOllama(model="llama3", temperature=0.0, num_predict=256, num_ctx=1024)
 
 
 # ── 3. Helpers ────────────────────────────────────────────────────────────────
