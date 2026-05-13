@@ -238,16 +238,11 @@ def check_compliance(state: PipelineState) -> dict:
     full_text  = state.get("document_text", "")
     pages_text = state.get("pages_text", [])
 
-    # ── Read entire PDF and store in FAISS (RAG) ───────────────────────────
-    chunks = chunk_text(full_text, chunk_size=500, overlap=100)
-    retriever = RAGRetriever(chunks, model=get_embedding_model()) if len(chunks) > 1 else None
-
-    if retriever:
-        combined_rules_query = " ".join(rules)
-        relevant_chunks = retriever.get_relevant_chunks(combined_rules_query, top_k=6)
-        context = "\n...\n".join(relevant_chunks)
-    else:
-        context = full_text
+    # ── Cloud LLM Full-Context Analysis ──────────────────────────────────────
+    # Since we are using Groq with a massive 128k context window, we no longer need 
+    # to use FAISS retrieval which filters out 90% of the document. We can feed the 
+    # ENTIRE document directly to the LLM for perfect accuracy.
+    context = full_text[:400000] # Safe truncation for ~100k tokens
 
     # ── Single batched LLM call for ALL rules ────────────────────────────────
     raw_results = _call_llm_batch(rules, context)
