@@ -87,7 +87,7 @@ with st.sidebar:
         f'</div>',
         unsafe_allow_html=True,
     )
-    if st.button("✏️ Edit Rules", key="sb_edit_rules", use_container_width=True):
+    if st.button("✏️ Edit Rules", key="sb_edit_rules", width="stretch"):
         st.session_state.show_rule_editor = not st.session_state.show_rule_editor
         st.rerun()
 
@@ -123,9 +123,9 @@ with st.sidebar:
     
     col_run, col_hist = st.columns([3, 1])
     with col_run:
-        run_scan = st.button("🚀 Run Scan", type="primary", use_container_width=True)
+        run_scan = st.button("🚀 Run Scan", type="primary", width="stretch")
     with col_hist:
-        if st.button("📂", help="View Scan History", use_container_width=True):
+        if st.button("📂", help="View Scan History", width="stretch"):
             st.session_state.show_history = not st.session_state.show_history
             st.session_state.show_rule_editor = False
             st.rerun()
@@ -304,7 +304,7 @@ if st.session_state.show_history:
             with c3:
                 st.markdown(f"**Score:** {s['final_score']}/100")
             with c4:
-                if st.button("View Report", key=f"hist_view_{s['id']}", type="secondary", use_container_width=True):
+                if st.button("View Report", key=f"hist_view_{s['id']}", type="secondary", width="stretch"):
                     # Load from history into session state
                     st.session_state.scan_results = {
                         "final_score": s["final_score"],
@@ -507,7 +507,7 @@ with tab_dashboard:
             ),
         ))
         fig.update_layout(**PLOTLY_LAYOUT, height=320)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col_donut:
         st.markdown(
@@ -535,7 +535,7 @@ with tab_dashboard:
                 x=0.5, y=0.5, font=dict(size=24, color="#f8fafc"), showarrow=False,
             )],
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     # Row 2: Radar + Bar
     col_radar, col_bar = st.columns(2)
@@ -576,7 +576,7 @@ with tab_dashboard:
             ),
             legend=dict(orientation="h", y=-0.1, font=dict(color="#94a3b8", size=11)),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col_bar:
         st.markdown(
@@ -619,7 +619,7 @@ with tab_dashboard:
             barmode="overlay",
             legend=dict(orientation="h", y=-0.15, font=dict(color="#94a3b8", size=11)),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     # Row 3: Risk Heatmap Bar
     st.markdown(
@@ -654,7 +654,7 @@ with tab_dashboard:
         xaxis=dict(gridcolor="rgba(0,0,0,0)"),
         yaxis=dict(gridcolor="rgba(51,65,85,0.3)"),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 # ─── TAB 2: DETAILED FINDINGS ──────────────────────────────────────────────
@@ -774,7 +774,7 @@ with tab_export:
             st.download_button(
                 "📄 PDF Report", data=pdf_out,
                 file_name="compliance_audit.pdf", mime="application/pdf",
-                use_container_width=True,
+                width="stretch",
             )
         except Exception as e:
             st.error(f"PDF generation error: {e}")
@@ -785,7 +785,7 @@ with tab_export:
             data=res.get("analysis_report", ""),
             file_name="compliance_audit.txt",
             mime="text/plain",
-            use_container_width=True,
+            width="stretch",
         )
 
     with c3:
@@ -805,5 +805,5 @@ with tab_export:
             data=jd,
             file_name="compliance_audit.json",
             mime="application/json",
-            use_container_width=True,
+            width="stretch",
         )
