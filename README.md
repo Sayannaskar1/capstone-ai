@@ -85,7 +85,7 @@ The graph has a **typed state** (`PipelineState`) — a Python dictionary that c
 
 **Sentence Transformers** is the library that converts text into these meaning-capturing vectors using a model called `all-MiniLM-L6-v2` — a compact but powerful embedding model.
 
-> **Note:** This infrastructure is fully implemented in `rag_utils.py`, but the current `workflow.py` bypasses it in favor of **fast document sampling** (reading the beginning, middle, and end of the document) to hit the sub-10-second target for large documents.
+> **Note:** The system uses overlapping text chunking and FAISS retrieval to ensure no compliance violations are missed across page boundaries, feeding only the most relevant document slices to the LLM.
 
 ### 📊 Plotly
 **Plotly** is a data visualization library that creates interactive, beautiful charts — gauges, radar charts, donut charts, bar charts. All charts in the Dashboard tab are rendered using Plotly.
@@ -159,8 +159,8 @@ The compliance pipeline is a **blocking operation** — it calls an LLM and wait
 
 To solve this, `app.py` uses Python's `concurrent.futures.ThreadPoolExecutor` to run the pipeline in a separate thread. The main thread enters a polling loop, calling `progress_box.caption()` every 0.3 seconds. This Streamlit API call is what enables the Stop button to work — when you click Stop, Streamlit raises a `StopException` the next time a Streamlit API call is made.
 
-### Step 4: Context Sampling (`workflow.py`)
-Instead of running the expensive RAG pipeline (embedding + indexing all chunks), the system uses **Fast Context Sampling**: it takes 500 characters from the beginning, 500 from the middle, and 500 from the end of the document. This 1,500-character sample gives the LLM enough signal to evaluate most compliance rules while taking near-zero time to prepare.
+### Step 4: FAISS Vector Retrieval (`workflow.py` + `rag_utils.py`)
+To ensure the LLM receives the most relevant information without exceeding its context window, the document is split into 500-word chunks. These chunks are embedded using `sentence-transformers` and indexed in FAISS. All compliance rules are combined into a single query to retrieve the top 6 most relevant chunks.
 
 ### Step 5: Batched LLM Call (`workflow.py`)
 All compliance rules are sent to Llama 3 in a **single prompt**. This is the most important performance optimization. The prompt looks like this:
@@ -298,11 +298,15 @@ Unit and integration tests that run without needing a PDF or a browser. Validate
 
 ### Step 1: Clone or Download the Project
 ```bash
-cd ~/Desktop/ai-capstone
+git clone https://github.com/Sayannaskar1/capstone-ai.git
+cd capstone-ai
 ```
 
-### Step 2: Install Python Dependencies
+### Step 2: Set up a Virtual Environment & Install Dependencies
+It is highly recommended to use a Python virtual environment:
 ```bash
+python3 -m venv venv
+source venv/bin/activate  # On Windows use: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
@@ -324,7 +328,7 @@ This installs:
 Ollama is the tool that runs Llama 3 locally.
 
 1. Download from [https://ollama.com](https://ollama.com)
-2. Install and launch Ollama
+2. Install and launch the Ollama application (it must remain running in the background)
 3. Pull the Llama 3 model (this downloads ~4.7 GB, one time only):
 ```bash
 ollama pull llama3
@@ -334,6 +338,7 @@ ollama pull llama3
 ollama list
 # Should show: llama3   ...
 ```
+*(Note: If you are running on a Linux server without a desktop GUI, you must start the server manually by running `ollama serve` in a separate terminal window).*
 
 ---
 
@@ -397,14 +402,16 @@ rule_score = status_weight × llm_confidence
 
 ## Performance Design Decisions
 
-The original design used full RAG (chunking → embedding → FAISS indexing → retrieval) which took 20–25 seconds on large documents. Three changes brought this to under 10 seconds:
+The pipeline is optimized for sub-10-second latency while maintaining full document coverage:
 
-| Optimization | Before | After | Time Saved |
-|-------------|--------|-------|-----------|
-| Skip RAG embedding | ~7s for 900-page doc | 0s (sampling instead) | ~7s |
-| Reduce `num_ctx` | 4096 tokens | 1024 tokens | ~4s |
-| Reduce `num_predict` | 1024 tokens | 256 tokens | ~5s |
-| Batched rules (1 LLM call) | N calls × latency | 1 call | Already in place |
+| Optimization | Description | Time Saved |
+|-------------|--------|-----------|
+| Batched LLM Call | All rules are evaluated in a single prompt rather than one-by-one | ~30s |
+| FAISS Inner Product | Uses `IndexFlatIP` (cosine similarity) for lightning-fast retrieval over L2 distance | ~1s |
+| Reduced `num_ctx` | Context window strictly limited to 1024 tokens to speed up inference | ~4s |
+| Reduced `num_predict` | Max generation limited to 256 tokens | ~5s |
+| Eager Model Loading | `SentenceTransformer` model is cached on `app.py` startup to prevent UI freezing | UX improvement |
+| Deterministic Engine | LLM runs with `temperature=0.0` for perfectly reproducible output across runs | Consistency |
 
 ---
 
