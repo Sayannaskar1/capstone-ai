@@ -429,3 +429,31 @@ sqlite3            — Built-in Python, no install needed
 ---
 
 *Built with ❤️ using LangGraph, Groq, Streamlit, and Python.*
+
+
+## Testing and validating the results 
+
+Drop eval_suite.py into your project root (same folder as workflow.py) and run it with:
+bash
+python eval_suite.py                  # full run
+python eval_suite.py --verbose        # see LLM explanations per rule
+python eval_suite.py --consistency    # test determinism
+python eval_suite.py --json           # save to eval_results.json
+python eval_suite.py --case TC02      # single case
+Here's the full explanation for your trainer — what industry practice this follows and why:
+The technique: Golden-Set / Ground-Truth Evaluation
+This is the same approach used by OpenAI Evals, DeepEval, RAGAS, and MLflow model validation. The idea is simple: you create a set of test documents where you already know the correct answer, run your model against them, and measure how often it gets the right answer. No manual checking needed each time.
+What the suite tests:
+1. Classification accuracy — for each rule, did the LLM label it COMPLIANT / PARTIAL / NON-COMPLIANT correctly? Gives you a Precision, Recall, and F1 score per label, same as any ML classifier evaluation.
+2. Overall verdict accuracy — did the final COMPLIANT / PARTIAL / NON-COMPLIANT verdict match what it should be? Measured across 6 golden cases.
+3. Hallucination rate — the most important metric for your trainer. This specifically catches when the LLM says COMPLIANT but the ground truth is NON-COMPLIANT. That's the dangerous failure mode — missing a real violation. Anything below 10% is good.
+4. Consistency test — runs the same document 3 times and checks if the LLM gives the same verdict every time. Your pipeline uses temperature=0.0 so it should be 100% consistent. This is how you prove the model isn't randomly guessing.
+The 6 test cases cover:
+TC01: Complete legal contract (all rules present → all COMPLIANT)
+TC02: Document with real PII (detection rules → NON-COMPLIANT)
+TC03: Clean document with no PII (detection rules → all COMPLIANT)
+TC04: Full SLA contract (all SLA clauses present)
+TC05: Incomplete contract (nothing present → all NON-COMPLIANT)
+TC06: Near-empty placeholder document (edge case)
+The key difference from your existing test_pipeline.py is that the existing file only checks that the pipeline runs without crashing and that scores are within 0–100. It doesn't check whether the answers are correct. This suite checks correctness.
+Eval suite
